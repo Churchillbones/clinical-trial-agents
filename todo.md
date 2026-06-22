@@ -1,13 +1,14 @@
 # Clinical Trials Agent — Development Checklist
 
-> **Status (2026-06-22):** Phases 1, 1B, 1C and the Phase 2.5 tool functions are
-> implemented with TDD — **19 tests passing** (18 unit/integration + 1 flow). All 7
-> tools, their `FunctionTool` schemas, the system prompt, and the `main.py`
-> function-call loop are committed. Phase 2 **code artifacts are done**
-> (`deploy_agent.py`, `apim-clinical-trials-policy.xml`); the **live** deploy +
-> Playground + APIM tests are **BLOCKED** in this environment (no `az login`,
-> Foundry Toolkit extension not installed, VA TIC). Remaining: run the live
-> deploy/APIM steps once Azure access is available, and Phase 3 VA enhancements.
+> **Status (2026-06-22):** 19 tests passing. The agent is now a **Microsoft Agent
+> Framework** hosted agent — `main.py` uses `FoundryChatClient` + `Agent` +
+> `ResponsesHostServer` (verified starting on :8088) with the 7 CTG tools as
+> `@tool` wrappers; toolkit scaffolding added (`agent.yaml`, `agent.manifest.yaml`,
+> `Dockerfile`, `.vscode/`). The Foundry Toolkit extension is installed.
+> **Remaining to test in Foundry:** sign in to the toolkit + select the 806
+> project (Foundry Project Manager role), then F5 / Deploy Hosted Agent; mind VA
+> TIC/VPN. `deploy_agent.py` + the APIM policy remain as an alternative
+> prompt-agent path.
 
 > **Source of truth:** `spec.md` (tool schemas, system prompt, API mappings)
 > **Execution guide:** `implementation-plan.md` (TDD steps, code, commands)

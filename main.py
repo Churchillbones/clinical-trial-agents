@@ -1,27 +1,173 @@
-"""Clinical Trials Search agent — entry point.
+"""Clinical Trials Search agent — Microsoft Agent Framework entry point.
 
-Runs the Agent Framework / Responses API function-call loop over the seven
-ClinicalTrials.gov tools. Exposes ``POST /responses`` on :8088 for local
-testing (F5) and serves as the hosted-agent entry point for Foundry.
+Hosts the seven ClinicalTrials.gov tools as an Agent Framework ``Agent`` served
+over the OpenAI Responses protocol via ``ResponsesHostServer`` on :8088. This is
+the entry point the Foundry Toolkit runs locally (F5 / Agent Inspector) and
+deploys as a Foundry hosted agent (the Dockerfile runs ``python main.py``).
+
+All ClinicalTrials.gov logic lives in ``clinical_trials_tools`` (covered by the
+pytest suite); the functions below are thin Agent Framework ``@tool`` wrappers
+around it.
 """
 
 from __future__ import annotations
 
-import json
 import logging
 import os
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import Annotated, Literal
 
+from agent_framework import Agent, tool
 from dotenv import load_dotenv
+from pydantic import Field
 
 import clinical_trials_tools as ct
-from tool_definitions import all_tools
+
+load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("clinical-trials-agent")
 
-# Map tool name -> implementation. Mirrors tool_definitions.all_tools.
+DEFAULT_MODEL = "gpt-5.4-nano"
+
+StatusType = Literal[
+    "RECRUITING",
+    "NOT_YET_RECRUITING",
+    "ACTIVE_NOT_RECRUITING",
+    "COMPLETED",
+    "ENROLLING_BY_INVITATION",
+    "SUSPENDED",
+    "TERMINATED",
+    "WITHDRAWN",
+]
+PhaseType = Literal["EARLY_PHASE1", "PHASE1", "PHASE2", "PHASE3", "PHASE4", "NA"]
+SexType = Literal["MALE", "FEMALE", "ALL"]
+
+
+def _load_system_prompt() -> str:
+    """Read the agent instructions from ``system_prompt.txt`` (lazy)."""
+    return (Path(__file__).parent / "system_prompt.txt").read_text(encoding="utf-8")
+
+
+# --------------------------------------------------------------------------- #
+# Agent Framework tool wrappers — thin shims over clinical_trials_tools.
+# The model sees these; the underlying functions hold the tested CTG logic.
+# --------------------------------------------------------------------------- #
+@tool(approval_mode="never_require")
+def search_studies(
+    term: Annotated[str | None, Field(description="General search term across title, condition, intervention, and summary.")] = None,
+    condition: Annotated[str | None, Field(description="Patient's condition or diagnosis, e.g. 'PTSD', 'type 2 diabetes'.")] = None,
+    intervention: Annotated[str | None, Field(description="Treatment or intervention of interest, e.g. 'psilocybin', 'CBT'.")] = None,
+    location: Annotated[str | None, Field(description="City, state, or VA facility near the patient, e.g. 'Portland VA'.")] = None,
+    sponsor: Annotated[str | None, Field(description="Sponsor or collaborator name, e.g. 'Department of Veterans Affairs'.")] = None,
+    age: Annotated[str | None, Field(description="Patient age or age group, e.g. '62' or 'OLDER_ADULT'.")] = None,
+    sex: Annotated[SexType | None, Field(description="Patient sex for eligibility filtering.")] = None,
+    status: Annotated[StatusType | None, Field(description="Recruitment status. Defaults to RECRUITING.")] = "RECRUITING",
+    phase: Annotated[PhaseType | None, Field(description="Study phase filter.")] = None,
+    page_size: Annotated[int, Field(description="Number of results to return (1-20, default 10).")] = 10,
+) -> dict:
+    """Search ClinicalTrials.gov for studies. Use whenever the user asks about
+    clinical trials, studies, or research for a condition, intervention, or
+    location."""
+    return ct.search_studies(
+        term=term,
+        condition=condition,
+        intervention=intervention,
+        location=location,
+        sponsor=sponsor,
+        age=age,
+        sex=sex,
+        status=status,
+        phase=phase,
+        page_size=page_size,
+    )
+
+
+@tool(approval_mode="never_require")
+def get_study_details(
+    nct_id: Annotated[str, Field(description="The NCT identifier, e.g. 'NCT12345678'.")],
+) -> dict:
+    """Retrieve the complete details of a clinical trial by NCT ID — eligibility,
+    locations with contacts, status, and design."""
+    return ct.get_study_details(nct_id)
+
+
+@tool(approval_mode="never_require")
+def check_eligibility(
+    nct_id: Annotated[str, Field(description="The NCT identifier, e.g. 'NCT12345678'.")],
+) -> dict:
+    """Retrieve eligibility criteria, age range, sex, and healthy-volunteer status
+    for a study without pulling the full record."""
+    return ct.check_eligibility(nct_id)
+
+
+@tool(approval_mode="never_require")
+def count_studies(
+    term: Annotated[str | None, Field(description="General search term.")] = None,
+    condition: Annotated[str | None, Field(description="Condition or diagnosis.")] = None,
+    intervention: Annotated[str | None, Field(description="Treatment or intervention.")] = None,
+    sponsor: Annotated[str | None, Field(description="Sponsor or collaborator name.")] = None,
+    status: Annotated[StatusType | None, Field(description="Recruitment status filter.")] = None,
+) -> int:
+    """Count studies matching the criteria without returning full records."""
+    return ct.count_studies(
+        term=term,
+        condition=condition,
+        intervention=intervention,
+        sponsor=sponsor,
+        status=status,
+    )
+
+
+@tool(approval_mode="never_require")
+def list_enum_values(
+    enum_name: Annotated[str, Field(description="Coded field name, e.g. 'Phase', 'StudyType', 'OverallStatus'.")],
+) -> list[str]:
+    """List valid values for a ClinicalTrials.gov coded field."""
+    return ct.list_enum_values(enum_name)
+
+
+@tool(approval_mode="never_require")
+def generate_trial_summary(
+    nct_id: Annotated[str, Field(description="The NCT identifier.")],
+    patient_context: Annotated[str | None, Field(description="Optional short, de-identified patient context (NO PHI).")] = None,
+) -> dict:
+    """Build a structured, patient-friendly summary payload for a study, ready to
+    render as a plain-language handout."""
+    return ct.generate_trial_summary(nct_id, patient_context=patient_context)
+
+
+@tool(approval_mode="never_require")
+def draft_referral_message(
+    nct_id: Annotated[str, Field(description="The NCT identifier.")],
+    patient_summary: Annotated[str, Field(description="De-identified clinical context for the candidate (NO PHI).")],
+    clinician_name: Annotated[str | None, Field(description="Referring clinician's name for the signature.")] = None,
+    clinician_facility: Annotated[str | None, Field(description="Referring clinician's VA facility.")] = None,
+) -> dict:
+    """Draft a de-identified referral message to a study coordinator for the
+    clinician to review. Never transmits anything."""
+    return ct.draft_referral_message(
+        nct_id,
+        patient_summary,
+        clinician_name=clinician_name,
+        clinician_facility=clinician_facility,
+    )
+
+
+AGENT_TOOLS = [
+    search_studies,
+    get_study_details,
+    check_eligibility,
+    count_studies,
+    list_enum_values,
+    generate_trial_summary,
+    draft_referral_message,
+]
+
+
+# --------------------------------------------------------------------------- #
+# Back-compat dispatch used by the integration test (exercises raw functions).
+# --------------------------------------------------------------------------- #
 TOOL_DISPATCH = {
     "search_studies": ct.search_studies,
     "get_study_details": ct.get_study_details,
@@ -32,29 +178,19 @@ TOOL_DISPATCH = {
     "draft_referral_message": ct.draft_referral_message,
 }
 
-MAX_TOOL_TURNS = 8
-DEFAULT_MODEL = "gpt-5.4-nano"
-
-_openai_client = None
-
-
-def _load_system_prompt() -> str:
-    """Read the agent system prompt from disk (lazy — not at import time)."""
-    return (Path(__file__).parent / "system_prompt.txt").read_text(encoding="utf-8")
-
 
 def dispatch_tool(name: str, arguments: dict) -> dict:
     """Execute a tool by name with keyword arguments.
 
     Returns a JSON-serialisable dict. Unknown tools and tool errors are
-    returned as ``{"error": ...}`` so the model can recover gracefully.
+    returned as ``{"error": ...}``.
     """
     func = TOOL_DISPATCH.get(name)
     if func is None:
         return {"error": f"Unknown tool: {name}"}
     try:
         result = func(**arguments)
-    except Exception as exc:  # surface tool failures to the model, don't crash
+    except Exception as exc:  # surface tool failures, don't crash
         logger.exception("Tool %s failed", name)
         return {"error": f"{type(exc).__name__}: {exc}"}
     if isinstance(result, dict):
@@ -62,125 +198,39 @@ def dispatch_tool(name: str, arguments: dict) -> dict:
     return {"result": result}
 
 
-def _get_openai_client():
-    """Lazily create the Foundry-backed OpenAI client (needs Entra auth)."""
-    global _openai_client
-    if _openai_client is None:
-        from azure.ai.projects import AIProjectClient
-        from azure.identity import DefaultAzureCredential
+def build_agent() -> Agent:
+    """Construct the Foundry-backed Agent with the seven ClinicalTrials.gov tools."""
+    from agent_framework.foundry import FoundryChatClient
+    from azure.identity import DefaultAzureCredential
 
-        endpoint = os.environ.get("FOUNDRY_PROJECT_ENDPOINT", "")
-        if not endpoint:
-            raise RuntimeError("FOUNDRY_PROJECT_ENDPOINT is not set")
-        project = AIProjectClient(
-            endpoint=endpoint,
-            credential=DefaultAzureCredential(),
-        )
-        _openai_client = project.get_openai_client()
-    return _openai_client
+    endpoint = os.environ.get("FOUNDRY_PROJECT_ENDPOINT", "")
+    if not endpoint:
+        raise RuntimeError("FOUNDRY_PROJECT_ENDPOINT is not set")
+    model = os.environ.get("AZURE_AI_MODEL_DEPLOYMENT_NAME") or os.environ.get(
+        "FOUNDRY_MODEL_NAME", DEFAULT_MODEL
+    )
 
-
-def run_agent(user_input: str, conversation_id: str | None = None) -> str:
-    """Run the model with the tool loop and return the final text answer."""
-    from openai.types.responses.response_input_param import FunctionCallOutput
-
-    load_dotenv()
-    model_name = os.environ.get("FOUNDRY_MODEL_NAME", DEFAULT_MODEL)
-    system_prompt = _load_system_prompt()
-    client = _get_openai_client()
-    tools = [t.as_dict() for t in all_tools]
-    input_list: list = [{"role": "user", "content": user_input}]
-
-    for _ in range(MAX_TOOL_TURNS):
-        kwargs: dict = {
-            "model": model_name,
-            "instructions": system_prompt,
-            "input": input_list,
-            "tools": tools,
-        }
-        if conversation_id:
-            kwargs["conversation"] = conversation_id
-        response = client.responses.create(**kwargs)
-
-        function_calls = [
-            item for item in response.output
-            if getattr(item, "type", None) == "function_call"
-        ]
-        if not function_calls:
-            return response.output_text
-
-        input_list.extend(response.output)
-        for fc in function_calls:
-            args = json.loads(fc.arguments) if fc.arguments else {}
-            result = dispatch_tool(fc.name, args)
-            input_list.append(
-                FunctionCallOutput(
-                    type="function_call_output",
-                    call_id=fc.call_id,
-                    output=json.dumps(result, default=str),
-                )
-            )
-
-    return "I was unable to complete the request within the tool-call limit."
-
-
-class ResponsesHandler(BaseHTTPRequestHandler):
-    """Minimal HTTP surface for local testing: POST /responses."""
-
-    def _send_json(self, status: int, payload: dict) -> None:
-        body = json.dumps(payload).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def do_GET(self) -> None:  # noqa: N802 (stdlib naming)
-        if self.path == "/health":
-            self._send_json(200, {"status": "ok"})
-        else:
-            self._send_json(404, {"error": "Not found"})
-
-    def do_POST(self) -> None:  # noqa: N802 (stdlib naming)
-        if self.path != "/responses":
-            self._send_json(404, {"error": "Not found"})
-            return
-        length = int(self.headers.get("Content-Length", "0"))
-        try:
-            payload = json.loads(self.rfile.read(length) or b"{}")
-        except json.JSONDecodeError:
-            self._send_json(400, {"error": "Invalid JSON body"})
-            return
-
-        user_input = payload.get("input")
-        if not user_input:
-            self._send_json(400, {"error": "Missing 'input'"})
-            return
-
-        try:
-            answer = run_agent(user_input, payload.get("conversation"))
-        except Exception as exc:  # pragma: no cover - network/auth failures
-            logger.exception("Agent run failed")
-            self._send_json(500, {"error": f"{type(exc).__name__}: {exc}"})
-            return
-
-        self._send_json(200, {"output_text": answer})
-
-    def log_message(self, fmt: str, *args) -> None:  # quieter logging
-        logger.info("%s - %s", self.address_string(), fmt % args)
+    client = FoundryChatClient(
+        project_endpoint=endpoint,
+        model=model,
+        credential=DefaultAzureCredential(),
+    )
+    return Agent(
+        client=client,
+        instructions=_load_system_prompt(),
+        tools=AGENT_TOOLS,
+        # History is managed by the hosting infrastructure (no service-side store).
+        default_options={"store": False},
+    )
 
 
 def main() -> None:
-    load_dotenv()
-    host = os.environ.get("AGENT_HOST", "0.0.0.0")
-    port = int(os.environ.get("AGENT_PORT", "8088"))
-    server = ThreadingHTTPServer((host, port), ResponsesHandler)
-    logger.info("Clinical Trials agent listening on http://%s:%d/responses", host, port)
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        logger.info("Shutting down")
-        server.shutdown()
+    from agent_framework_foundry_hosting import ResponsesHostServer
+
+    agent = build_agent()
+    server = ResponsesHostServer(agent)
+    logger.info("Starting Clinical Trials hosted agent (Responses protocol) on :8088")
+    server.run()
 
 
 if __name__ == "__main__":
