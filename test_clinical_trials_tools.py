@@ -158,3 +158,22 @@ def test_list_enum_values_unknown_enum():
     )
     result = list_enum_values("Nonexistent")
     assert result == []
+
+
+@respx.mock
+def test_search_studies_api_timeout():
+    respx.get("https://clinicaltrials.gov/api/v2/studies").mock(
+        side_effect=httpx.ConnectTimeout("Timeout")
+    )
+    with pytest.raises(httpx.ConnectTimeout):
+        search_studies(condition="PTSD")
+
+
+@respx.mock
+def test_search_studies_empty_results():
+    respx.get("https://clinicaltrials.gov/api/v2/studies").mock(
+        return_value=httpx.Response(200, json={"studies": [], "totalCount": 0})
+    )
+    result = search_studies(condition="xyznonexistent")
+    assert result["totalCount"] == 0
+    assert result["studies"] == []
