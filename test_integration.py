@@ -107,3 +107,18 @@ def test_full_referral_flow():
     assert nct in referral["messageBody"]
     assert "Dr. Jane Smith" in referral["messageBody"]
     assert "disclaimer" in referral
+
+
+def test_dispatch_tool_unknown_returns_error():
+    result = dispatch_tool("not_a_real_tool", {})
+    assert result == {"error": "Unknown tool: not_a_real_tool"}
+
+
+@respx.mock
+def test_dispatch_tool_wraps_tool_exception():
+    respx.get("https://clinicaltrials.gov/api/v2/studies").mock(
+        return_value=httpx.Response(500, json={"message": "boom"})
+    )
+    result = dispatch_tool("search_studies", {"condition": "PTSD"})
+    assert "error" in result
+    assert result["error"].startswith("HTTPStatusError")

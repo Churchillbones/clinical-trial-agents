@@ -61,7 +61,7 @@ def test_search_studies_defaults_to_recruiting():
         return_value=httpx.Response(200, json=MOCK_SEARCH_RESPONSE)
     )
     search_studies(condition="diabetes")
-    assert "RECRUITING" in str(route.calls[0].request.url)
+    assert route.calls[0].request.url.params["filter.overallStatus"] == "RECRUITING"
 
 
 @respx.mock
@@ -70,7 +70,7 @@ def test_search_studies_with_location():
         return_value=httpx.Response(200, json=MOCK_SEARCH_RESPONSE)
     )
     search_studies(condition="PTSD", location="Portland VA")
-    assert "Portland" in str(route.calls[0].request.url)
+    assert route.calls[0].request.url.params["query.locn"] == "Portland VA"
 
 
 MOCK_STUDY_DETAIL = {

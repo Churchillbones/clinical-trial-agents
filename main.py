@@ -18,17 +18,8 @@ from dotenv import load_dotenv
 import clinical_trials_tools as ct
 from tool_definitions import all_tools
 
-load_dotenv()
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("clinical-trials-agent")
-
-HOST = os.environ.get("AGENT_HOST", "0.0.0.0")
-PORT = int(os.environ.get("AGENT_PORT", "8088"))
-MODEL_NAME = os.environ.get("FOUNDRY_MODEL_NAME", "gpt-5.4-nano")
-PROJECT_ENDPOINT = os.environ.get("FOUNDRY_PROJECT_ENDPOINT", "")
-
-SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.txt").read_text(encoding="utf-8")
 
 # Map tool name -> implementation. Mirrors tool_definitions.all_tools.
 TOOL_DISPATCH = {
@@ -42,8 +33,14 @@ TOOL_DISPATCH = {
 }
 
 MAX_TOOL_TURNS = 8
+DEFAULT_MODEL = "gpt-5.4-nano"
 
 _openai_client = None
+
+
+def _load_system_prompt() -> str:
+    """Read the agent system prompt from disk (lazy — not at import time)."""
+    return (Path(__file__).parent / "system_prompt.txt").read_text(encoding="utf-8")
 
 
 def dispatch_tool(name: str, arguments: dict) -> dict:
@@ -72,10 +69,11 @@ def _get_openai_client():
         from azure.ai.projects import AIProjectClient
         from azure.identity import DefaultAzureCredential
 
-        if not PROJECT_ENDPOINT:
+        endpoint = os.environ.get("FOUNDRY_PROJECT_ENDPOINT", "")
+        if not endpoint:
             raise RuntimeError("FOUNDRY_PROJECT_ENDPOINT is not set")
         project = AIProjectClient(
-            endpoint=PROJECT_ENDPOINT,
+            endpoint=endpoint,
             credential=DefaultAzureCredential(),
         )
         _openai_client = project.get_openai_client()
@@ -86,14 +84,17 @@ def run_agent(user_input: str, conversation_id: str | None = None) -> str:
     """Run the model with the tool loop and return the final text answer."""
     from openai.types.responses.response_input_param import FunctionCallOutput
 
+    load_dotenv()
+    model_name = os.environ.get("FOUNDRY_MODEL_NAME", DEFAULT_MODEL)
+    system_prompt = _load_system_prompt()
     client = _get_openai_client()
     tools = [t.as_dict() for t in all_tools]
     input_list: list = [{"role": "user", "content": user_input}]
 
     for _ in range(MAX_TOOL_TURNS):
         kwargs: dict = {
-            "model": MODEL_NAME,
-            "instructions": SYSTEM_PROMPT,
+            "model": model_name,
+            "instructions": system_prompt,
             "input": input_list,
             "tools": tools,
         }
@@ -170,8 +171,11 @@ class ResponsesHandler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    server = ThreadingHTTPServer((HOST, PORT), ResponsesHandler)
-    logger.info("Clinical Trials agent listening on http://%s:%d/responses", HOST, PORT)
+    load_dotenv()
+    host = os.environ.get("AGENT_HOST", "0.0.0.0")
+    port = int(os.environ.get("AGENT_PORT", "8088"))
+    server = ThreadingHTTPServer((host, port), ResponsesHandler)
+    logger.info("Clinical Trials agent listening on http://%s:%d/responses", host, port)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
