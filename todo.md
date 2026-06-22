@@ -1,11 +1,13 @@
 # Clinical Trials Agent — Development Checklist
 
 > **Status (2026-06-22):** Phases 1, 1B, 1C and the Phase 2.5 tool functions are
-> implemented with TDD — **17 tests passing** (16 unit + 1 integration). All 7
+> implemented with TDD — **19 tests passing** (18 unit/integration + 1 flow). All 7
 > tools, their `FunctionTool` schemas, the system prompt, and the `main.py`
-> function-call loop are committed. Remaining: `test-reviewer`/`wwvd` agent
-> passes, Phase 2 Foundry deployment + APIM (needs `az login` / Azure access),
-> and Phase 3 VA enhancements.
+> function-call loop are committed. Phase 2 **code artifacts are done**
+> (`deploy_agent.py`, `apim-clinical-trials-policy.xml`); the **live** deploy +
+> Playground + APIM tests are **BLOCKED** in this environment (no `az login`,
+> Foundry Toolkit extension not installed, VA TIC). Remaining: run the live
+> deploy/APIM steps once Azure access is available, and Phase 3 VA enhancements.
 
 > **Source of truth:** `spec.md` (tool schemas, system prompt, API mappings)
 > **Execution guide:** `implementation-plan.md` (TDD steps, code, commands)
@@ -107,20 +109,24 @@
 ## Phase 2 — Deploy to Foundry
 
 - [ ] **Task 11: Deploy via Foundry Toolkit**
-  - [ ] `Foundry Toolkit: Deploy Hosted Agent` → Code → Remote
-  - [ ] Verify agent appears in Foundry portal
-  - [ ] Test in Playground tab: "Find recruiting PTSD trials near Portland VA"
-  - [ ] Register agent version via `agents.create_version()`
+  - [x] Register agent version via `agents.create_version()` — implemented in `deploy_agent.py`
+  - [ ] `Foundry Toolkit: Deploy Hosted Agent` → Code → Remote — **BLOCKED**: Foundry Toolkit extension not installed
+  - [ ] Verify agent appears in Foundry portal — blocked on deploy
+  - [ ] Test in Playground tab: "Find recruiting PTSD trials near Portland VA" — blocked on deploy
+  - Note: `deploy_agent.py` runs correctly up to auth; `DefaultAzureCredential`
+    finds no token source (no Azure CLI / Az PowerShell / VS Code sign-in). Run
+    `az login` (Azure AI User role) then `.\.venv\Scripts\python.exe deploy_agent.py`.
 
 - [ ] **Task 12: APIM Gateway**
-  - [ ] Create APIM operation for hosted agent endpoint
-  - [ ] Test via APIM URL
-  - [ ] Commit APIM policy XML
+  - [x] APIM operation policy authored → `apim-clinical-trials-policy.xml` (XML validated well-formed)
+  - [ ] Create the APIM operation + named value `foundry-backend-api-key` — **BLOCKED**: needs APIM admin
+  - [ ] Test via APIM URL — blocked on deploy + APIM config
 
 ### Phase 2 Gate
-- [ ] Agent works in Foundry Playground
-- [ ] Agent callable via APIM
-- [ ] **Run `verification-before-completion`** — verify all claims
+- [x] Phase 2 code artifacts committed (`deploy_agent.py`, APIM policy XML)
+- [ ] Agent works in Foundry Playground — blocked (auth/extension)
+- [ ] Agent callable via APIM — blocked (deploy + APIM admin)
+- [x] **`verification-before-completion`** — 19 tests green; deploy run surfaced the exact auth error (reported, not guessed)
 
 ---
 

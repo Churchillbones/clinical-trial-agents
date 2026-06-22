@@ -17,6 +17,8 @@ task-by-task TDD build. Progress is tracked in [todo.md](todo.md).
 | `tool_definitions.py` | `FunctionTool` schemas (`strict=True`) for all 7 tools |
 | `system_prompt.txt` | Agent instructions, loaded by `main.py` |
 | `main.py` | Agent entry point — function-call loop, `POST /responses` on :8088 |
+| `deploy_agent.py` | Registers the agent version in Foundry (`agents.create_version`) |
+| `apim-clinical-trials-policy.xml` | APIM operation policy routing to the hosted agent |
 | `test_clinical_trials_tools.py` | Unit tests for the tool functions |
 | `test_integration.py` | Full search → summary → referral flow (mocked CTG API) |
 
@@ -66,11 +68,23 @@ Health check: `GET http://localhost:8088/health`.
 | `FOUNDRY_AGENT_NAME` | Registered agent name |
 | `AGENT_HOST` / `AGENT_PORT` | Local server bind (defaults `0.0.0.0:8088`) |
 
-## Deploy to Foundry (next steps)
+## Deploy to Foundry
 
-1. `Foundry Toolkit: Deploy Hosted Agent` → Code → Remote.
-2. Register the agent version with `agents.create_version()` using
-   `PromptAgentDefinition(model=..., instructions=SYSTEM_PROMPT, tools=all_tools)`.
-3. Test in the Foundry Playground, then expose through the existing APIM gateway.
+1. **Register the agent version** (bundles prompt + 7 tools into a
+   `PromptAgentDefinition`):
+
+   ```powershell
+   az login   # Azure AI User role on the Foundry resource
+   .\.venv\Scripts\python.exe deploy_agent.py
+   ```
+
+2. **Deploy the hosted-agent code** via the Foundry Toolkit VS Code extension:
+   `Foundry Toolkit: Deploy Hosted Agent` → Code → Remote.
+3. **Smoke test** in the Foundry Playground:
+   "Find recruiting PTSD trials near Portland VA".
+4. **Expose via APIM** using `apim-clinical-trials-policy.xml` (routes
+   `POST /api/projects/806/responses` → `/openai/v1/responses` with the
+   `clinical-trials-search` agent_reference; see the file header for the named
+   value / product prerequisites).
 
 See Phase 2 in [implementation-plan.md](implementation-plan.md).

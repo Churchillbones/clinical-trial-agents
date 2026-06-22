@@ -1,0 +1,119 @@
+<!--
+  APIM operation policy — Clinical Trials Search hosted agent
+  ===========================================================
+  Routes an external POST through the existing 806 APIM gateway to the Azure AI
+  Foundry **Responses API**, targeting the registered hosted agent
+  "clinical-trials-search" via an agent_reference.
+
+  Modeled on apim-config/apim-realtime-policy.xml (the corrected OpenAI v1
+  pattern), adapted from a WebSocket handshake to an HTTP POST operation.
+
+  =============================================================================
+  Suggested API / operation
+  =============================================================================
+    API type:        HTTP
+    Frontend route:  POST /api/projects/806/responses
+                     (or a friendlier alias such as POST /clinical-trials/responses)
+    Backend path:    /openai/v1/responses   (GA v1 — versioning is in the PATH,
+                     so NO api-version query param is used)
+
+  =============================================================================
+  Prerequisites — APIM admin must configure before applying this policy
+  =============================================================================
+    1. Named Value "foundry-backend-api-key" = the RAW Foundry resource key
+       (KEY1/KEY2 from the resource "Keys and Endpoint" page). NO "Bearer "
+       prefix. This is the same resource key validated working on the
+       /openai/* REST surface with the `api-key` header.
+    2. The API must be assigned to a Product with an active Subscription.
+       External callers authenticate with the Product subscription key,
+       passed as the `api-key` header (NOT Ocp-Apim-Subscription-Key; the
+       existing 806 APIs use `api-key`). APIM validates and strips it; this
+       policy re-injects the backend key below.
+    3. The hosted agent "clinical-trials-search" must be registered in the
+       Foundry project (see deploy_agent.py / Task 11).
+
+  =============================================================================
+  Caller contract
+  =============================================================================
+    POST https://[apim-host]/api/projects/806/responses
+    Headers:
+      api-key: <product-subscription-key>
+      Content-Type: application/json
+    Body (minimal — the agent_reference is injected by this policy if omitted):
+      {
+        "input": "Find recruiting PTSD trials near Portland VA"
+      }
+    The policy injects model + agent_reference when they are absent, so callers
+    only need to supply "input". Callers MAY override either field.
+
+  NOTE (from prior 806 APIM work): date-string api-version values returned
+  400 "API version not supported" while the v1 PATH route works; that is why we
+  delete api-version and rely on the /openai/v1/ path.
+-->
+<policies>
+  <inbound>
+    <base />
+
+    <!-- VA network allow-list (same ranges as the realtime/voicelive policies). -->
+    <ip-filter action="allow">
+      <address-range from="152.124.0.0" to="152.124.255.255" />
+      <address-range from="152.129.0.0" to="152.129.255.255" />
+      <address-range from="152.130.0.0" to="152.130.255.255" />
+      <address-range from="152.131.0.0" to="152.131.255.255" />
+      <address-range from="152.132.0.0" to="152.132.255.255" />
+      <address-range from="152.133.0.0" to="152.133.255.255" />
+    </ip-filter>
+
+    <!-- Point at the Foundry resource and rewrite to the GA v1 Responses path. -->
+    <set-backend-service base-url="https://spd2494-dev-eus2-806-fdy.services.ai.azure.com" />
+    <rewrite-uri template="/openai/v1/responses" copy-unmatched-params="false" />
+
+    <!-- v1 API versions in the PATH; strip any api-version the client sends. -->
+    <set-query-parameter name="api-version" exists-action="delete" />
+
+    <!--
+      Re-inject the backend API key. APIM strips the caller's subscription key
+      after validation, so we add the Foundry resource key for the backend.
+      The /openai/* surface expects `api-key` (not Authorization: Bearer).
+    -->
+    <set-header name="api-key" exists-action="override">
+      <value>{{foundry-backend-api-key}}</value>
+    </set-header>
+
+    <!-- Remove auth query params so they don't leak to the backend URL. -->
+    <set-query-parameter name="api-key" exists-action="delete" />
+    <set-query-parameter name="subscription-key" exists-action="delete" />
+
+    <!--
+      Default the model + agent_reference into the body when the caller omits
+      them, so clients only need to send {"input": "..."}. Existing fields are
+      preserved (caller overrides win).
+    -->
+    <set-body><![CDATA[@{
+        var body = context.Request.Body.As<JObject>(preserveContent: true);
+        if (body["model"] == null) {
+            body["model"] = "gpt-5.4-nano";
+        }
+        if (body["agent_reference"] == null) {
+            body["agent_reference"] = new JObject {
+                ["type"] = "agent_reference",
+                ["name"] = "clinical-trials-search"
+            };
+        }
+        return body.ToString();
+    }]]></set-body>
+  </inbound>
+
+  <backend>
+    <base />
+    <forward-request />
+  </backend>
+
+  <outbound>
+    <base />
+  </outbound>
+
+  <on-error>
+    <base />
+  </on-error>
+</policies>
