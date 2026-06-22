@@ -65,3 +65,28 @@ def check_eligibility(nct_id: str) -> dict:
         "healthyVolunteers": module.get("healthyVolunteers", "No"),
         "stdAges": module.get("stdAges", []),
     }
+
+
+def count_studies(
+    term: str | None = None,
+    condition: str | None = None,
+    intervention: str | None = None,
+    sponsor: str | None = None,
+    status: str | None = None,
+) -> int:
+    """Count studies matching the given criteria."""
+    params: dict[str, str] = {}
+    if term:
+        params["query.term"] = term
+    if condition:
+        params["query.cond"] = condition
+    if intervention:
+        params["query.intr"] = intervention
+    if sponsor:
+        params["query.spons"] = sponsor
+    if status:
+        params["filter.overallStatus"] = status
+
+    resp = httpx.get(f"{CTG_BASE_URL}/stats/size", params=params, timeout=15.0)
+    resp.raise_for_status()
+    return resp.json().get("totalCount", 0)

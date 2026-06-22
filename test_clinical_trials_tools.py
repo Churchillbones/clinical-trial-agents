@@ -6,6 +6,7 @@ import respx
 
 from clinical_trials_tools import (
     check_eligibility,
+    count_studies,
     get_study_details,
     search_studies,
 )
@@ -114,3 +115,21 @@ def test_check_eligibility_returns_eligibility_fields():
     assert result["minimumAge"] == "18 Years"
     assert result["maximumAge"] == "65 Years"
     assert result["sex"] == "ALL"
+
+
+@respx.mock
+def test_count_studies_returns_total():
+    respx.get("https://clinicaltrials.gov/api/v2/stats/size").mock(
+        return_value=httpx.Response(200, json={"totalCount": 42})
+    )
+    result = count_studies(condition="PTSD", status="RECRUITING")
+    assert result == 42
+
+
+@respx.mock
+def test_count_studies_no_filters():
+    respx.get("https://clinicaltrials.gov/api/v2/stats/size").mock(
+        return_value=httpx.Response(200, json={"totalCount": 500000})
+    )
+    result = count_studies()
+    assert result == 500000
