@@ -98,3 +98,40 @@ def list_enum_values(enum_name: str) -> list[str]:
     resp.raise_for_status()
     data = resp.json()
     return data.get(enum_name, [])
+
+
+def generate_trial_summary(nct_id: str, patient_context: str | None = None) -> dict:
+    """Build a structured, patient-friendly summary payload for a study.
+
+    Fetches the full study record and extracts the sections a clinician needs
+    to share with a patient. The agent renders this into plain-language prose.
+    """
+    study = get_study_details(nct_id)
+    protocol = study.get("protocolSection", {})
+    ident = protocol.get("identificationModule", {})
+    desc = protocol.get("descriptionModule", {})
+    elig = protocol.get("eligibilityModule", {})
+    status = protocol.get("statusModule", {})
+    contacts_locations = protocol.get("contactsLocationsModule", {})
+    resolved_id = ident.get("nctId", nct_id)
+
+    return {
+        "nctId": resolved_id,
+        "title": ident.get("briefTitle", ""),
+        "plainLanguageSummary": desc.get("briefSummary", ident.get("briefTitle", "")),
+        "whatParticipationInvolves": desc.get("detailedDescription", ""),
+        "eligibilityHighlights": {
+            "criteria": elig.get("eligibilityCriteria", ""),
+            "sex": elig.get("sex", "ALL"),
+            "minimumAge": elig.get("minimumAge", "N/A"),
+            "maximumAge": elig.get("maximumAge", "N/A"),
+            "healthyVolunteers": elig.get("healthyVolunteers", "No"),
+        },
+        "overallStatus": status.get("overallStatus", ""),
+        "contactInfo": {
+            "centralContacts": contacts_locations.get("centralContacts", []),
+            "locations": contacts_locations.get("locations", []),
+        },
+        "link": f"https://clinicaltrials.gov/study/{resolved_id}",
+        "patientContext": patient_context,
+    }

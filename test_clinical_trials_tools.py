@@ -7,6 +7,7 @@ import respx
 from clinical_trials_tools import (
     check_eligibility,
     count_studies,
+    generate_trial_summary,
     get_study_details,
     list_enum_values,
     search_studies,
@@ -177,3 +178,25 @@ def test_search_studies_empty_results():
     result = search_studies(condition="xyznonexistent")
     assert result["totalCount"] == 0
     assert result["studies"] == []
+
+
+@respx.mock
+def test_generate_trial_summary_returns_plain_language():
+    respx.get("https://clinicaltrials.gov/api/v2/studies/NCT00000001").mock(
+        return_value=httpx.Response(200, json=MOCK_STUDY_DETAIL)
+    )
+    result = generate_trial_summary("NCT00000001")
+    assert "nctId" in result
+    assert "plainLanguageSummary" in result
+    assert "contactInfo" in result
+
+
+@respx.mock
+def test_generate_trial_summary_with_patient_context():
+    respx.get("https://clinicaltrials.gov/api/v2/studies/NCT00000001").mock(
+        return_value=httpx.Response(200, json=MOCK_STUDY_DETAIL)
+    )
+    result = generate_trial_summary(
+        "NCT00000001", patient_context="58-year-old male with PTSD"
+    )
+    assert result["patientContext"] == "58-year-old male with PTSD"
