@@ -23,6 +23,13 @@ from pydantic import Field
 
 import clinical_trials_tools as ct
 
+# VA networks perform TLS inspection with a corporate root CA. Make Python trust
+# the OS certificate store (where that CA is installed) so outbound HTTPS to the
+# Foundry model endpoint and ClinicalTrials.gov verifies. No-op where unneeded.
+import truststore
+
+truststore.inject_into_ssl()
+
 load_dotenv()
 
 logging.basicConfig(level=logging.INFO)

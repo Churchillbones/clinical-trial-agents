@@ -3,6 +3,7 @@ agent-framework-foundry
 agent-framework-foundry-hosting
 mcp<2,>=1.24.0
 pydantic>=2
+truststore>=0.10  # trust the OS cert store (VA TLS-inspection root CA)
 
 # --- Azure auth + alternative prompt-agent registration path (deploy_agent.py) ---
 azure-ai-projects>=2.2.0
