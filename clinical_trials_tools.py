@@ -37,3 +37,10 @@ def search_studies(
     resp = httpx.get(f"{CTG_BASE_URL}/studies", params=params, timeout=15.0)
     resp.raise_for_status()
     return resp.json()
+
+
+def get_study_details(nct_id: str) -> dict:
+    """Retrieve the complete record for a single study by NCT ID."""
+    resp = httpx.get(f"{CTG_BASE_URL}/studies/{nct_id}", timeout=15.0)
+    resp.raise_for_status()
+    return resp.json()

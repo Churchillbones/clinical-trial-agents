@@ -4,7 +4,10 @@ import pytest
 import httpx
 import respx
 
-from clinical_trials_tools import search_studies
+from clinical_trials_tools import (
+    get_study_details,
+    search_studies,
+)
 
 MOCK_SEARCH_RESPONSE = {
     "studies": [
@@ -63,3 +66,38 @@ def test_search_studies_with_location():
     )
     search_studies(condition="PTSD", location="Portland VA")
     assert "Portland" in str(route.calls[0].request.url)
+
+
+MOCK_STUDY_DETAIL = {
+    "protocolSection": {
+        "identificationModule": {
+            "nctId": "NCT00000001",
+            "briefTitle": "Test Study",
+        },
+        "eligibilityModule": {
+            "eligibilityCriteria": "Inclusion: Age 18-65\nExclusion: Pregnant",
+            "sex": "ALL",
+            "minimumAge": "18 Years",
+            "maximumAge": "65 Years",
+        },
+    }
+}
+
+
+@respx.mock
+def test_get_study_details_returns_full_record():
+    respx.get("https://clinicaltrials.gov/api/v2/studies/NCT00000001").mock(
+        return_value=httpx.Response(200, json=MOCK_STUDY_DETAIL)
+    )
+    result = get_study_details("NCT00000001")
+    assert result["protocolSection"]["identificationModule"]["nctId"] == "NCT00000001"
+    assert "eligibilityModule" in result["protocolSection"]
+
+
+@respx.mock
+def test_get_study_details_invalid_nct_raises():
+    respx.get("https://clinicaltrials.gov/api/v2/studies/INVALID").mock(
+        return_value=httpx.Response(404, json={"error": "Not found"})
+    )
+    with pytest.raises(httpx.HTTPStatusError):
+        get_study_details("INVALID")
