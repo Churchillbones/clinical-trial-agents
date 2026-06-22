@@ -135,3 +135,42 @@ def generate_trial_summary(nct_id: str, patient_context: str | None = None) -> d
         "link": f"https://clinicaltrials.gov/study/{resolved_id}",
         "patientContext": patient_context,
     }
+
+
+def draft_referral_message(
+    nct_id: str,
+    patient_summary: str,
+    clinician_name: str | None = None,
+    clinician_facility: str | None = None,
+) -> dict:
+    """Draft a de-identified referral message to a study coordinator.
+
+    Returns a structured draft for the clinician to review and send. This
+    function never transmits anything.
+    """
+    study_url = f"https://clinicaltrials.gov/study/{nct_id}"
+    signature_name = clinician_name or "[Referring Clinician]"
+    signature_facility = clinician_facility or "[VA Facility]"
+
+    message_body = (
+        f"To the Study Coordinator for {nct_id},\n\n"
+        f"I am a clinician at {signature_facility} writing to inquire about "
+        f"enrollment in your study ({nct_id}, {study_url}).\n\n"
+        f"I am caring for a patient who may be a candidate. De-identified "
+        f"clinical context: {patient_summary}\n\n"
+        f"Could you share the current enrollment status, key eligibility "
+        f"requirements, and the preferred process for referring a patient?\n\n"
+        f"Thank you,\n"
+        f"{signature_name}\n"
+        f"{signature_facility}"
+    )
+
+    return {
+        "nctId": nct_id,
+        "messageBody": message_body,
+        "disclaimer": (
+            "Review before sending. Do NOT include PHI (patient name, DOB, SSN, "
+            "MRN, or other identifiable details) in this message. Share "
+            "identifiable information only through approved secure channels."
+        ),
+    }

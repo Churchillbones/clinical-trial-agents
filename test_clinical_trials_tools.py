@@ -7,6 +7,7 @@ import respx
 from clinical_trials_tools import (
     check_eligibility,
     count_studies,
+    draft_referral_message,
     generate_trial_summary,
     get_study_details,
     list_enum_values,
@@ -200,3 +201,28 @@ def test_generate_trial_summary_with_patient_context():
         "NCT00000001", patient_context="58-year-old male with PTSD"
     )
     assert result["patientContext"] == "58-year-old male with PTSD"
+
+
+def test_draft_referral_message_structure():
+    result = draft_referral_message(
+        nct_id="NCT00000001",
+        patient_summary="58-year-old male veteran, treatment-resistant PTSD, failed PE + sertraline",
+        clinician_name="Dr. Jane Smith",
+        clinician_facility="Portland VAMC",
+    )
+    assert result["nctId"] == "NCT00000001"
+    assert "NCT00000001" in result["messageBody"]
+    assert "Dr. Jane Smith" in result["messageBody"]
+    assert "Portland VAMC" in result["messageBody"]
+
+
+def test_draft_referral_message_no_phi_warning():
+    result = draft_referral_message(
+        nct_id="NCT00000001",
+        patient_summary="62-year-old female with diabetes",
+    )
+    assert "disclaimer" in result
+    assert (
+        "PHI" in result["disclaimer"]
+        or "identifiable" in result["disclaimer"].lower()
+    )
