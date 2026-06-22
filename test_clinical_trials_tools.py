@@ -5,6 +5,7 @@ import httpx
 import respx
 
 from clinical_trials_tools import (
+    check_eligibility,
     get_study_details,
     search_studies,
 )
@@ -101,3 +102,15 @@ def test_get_study_details_invalid_nct_raises():
     )
     with pytest.raises(httpx.HTTPStatusError):
         get_study_details("INVALID")
+
+
+@respx.mock
+def test_check_eligibility_returns_eligibility_fields():
+    respx.get("https://clinicaltrials.gov/api/v2/studies/NCT00000001").mock(
+        return_value=httpx.Response(200, json=MOCK_STUDY_DETAIL)
+    )
+    result = check_eligibility("NCT00000001")
+    assert "eligibilityCriteria" in result
+    assert result["minimumAge"] == "18 Years"
+    assert result["maximumAge"] == "65 Years"
+    assert result["sex"] == "ALL"

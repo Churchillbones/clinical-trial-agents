@@ -44,3 +44,24 @@ def get_study_details(nct_id: str) -> dict:
     resp = httpx.get(f"{CTG_BASE_URL}/studies/{nct_id}", timeout=15.0)
     resp.raise_for_status()
     return resp.json()
+
+
+def check_eligibility(nct_id: str) -> dict:
+    """Retrieve just the eligibility section for a study."""
+    resp = httpx.get(
+        f"{CTG_BASE_URL}/studies/{nct_id}",
+        params={"fields": "EligibilityCriteria,EligibilityModule"},
+        timeout=15.0,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    module = data.get("protocolSection", {}).get("eligibilityModule", {})
+    return {
+        "nctId": nct_id,
+        "eligibilityCriteria": module.get("eligibilityCriteria", ""),
+        "sex": module.get("sex", "ALL"),
+        "minimumAge": module.get("minimumAge", "N/A"),
+        "maximumAge": module.get("maximumAge", "N/A"),
+        "healthyVolunteers": module.get("healthyVolunteers", "No"),
+        "stdAges": module.get("stdAges", []),
+    }
