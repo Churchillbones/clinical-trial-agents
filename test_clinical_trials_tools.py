@@ -8,6 +8,7 @@ from clinical_trials_tools import (
     check_eligibility,
     count_studies,
     get_study_details,
+    list_enum_values,
     search_studies,
 )
 
@@ -133,3 +134,27 @@ def test_count_studies_no_filters():
     )
     result = count_studies()
     assert result == 500000
+
+
+@respx.mock
+def test_list_enum_values_returns_values():
+    respx.get("https://clinicaltrials.gov/api/v2/studies/enums").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "Phase": ["EARLY_PHASE1", "PHASE1", "PHASE2", "PHASE3", "PHASE4", "NA"],
+                "OverallStatus": ["RECRUITING", "COMPLETED"],
+            },
+        )
+    )
+    result = list_enum_values("Phase")
+    assert "PHASE2" in result
+
+
+@respx.mock
+def test_list_enum_values_unknown_enum():
+    respx.get("https://clinicaltrials.gov/api/v2/studies/enums").mock(
+        return_value=httpx.Response(200, json={"Phase": ["PHASE1"]})
+    )
+    result = list_enum_values("Nonexistent")
+    assert result == []

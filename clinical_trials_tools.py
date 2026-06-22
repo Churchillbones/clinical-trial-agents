@@ -90,3 +90,11 @@ def count_studies(
     resp = httpx.get(f"{CTG_BASE_URL}/stats/size", params=params, timeout=15.0)
     resp.raise_for_status()
     return resp.json().get("totalCount", 0)
+
+
+def list_enum_values(enum_name: str) -> list[str]:
+    """List valid values for a ClinicalTrials.gov coded field."""
+    resp = httpx.get(f"{CTG_BASE_URL}/studies/enums", timeout=15.0)
+    resp.raise_for_status()
+    data = resp.json()
+    return data.get(enum_name, [])
