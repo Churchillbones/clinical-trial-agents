@@ -1,5 +1,20 @@
 .env
+.env.local
 __pycache__/
 .venv/
 *.pyc
 .pytest_cache/
+.mypy_cache/
+.azure
+
+# Separate DevUI virtualenv
+.venv-devui/
+
+# Backups and logs
+*.bak
+logs_*.txt
+*.log
+
+# Editor / tooling state (not part of the agent)
+.specstory/
+.foundry/

@@ -75,7 +75,7 @@ def count_studies(
     status: str | None = None,
 ) -> int:
     """Count studies matching the given criteria."""
-    params: dict[str, str] = {}
+    params: dict[str, str | int] = {}
     if term:
         params["query.term"] = term
     if condition:
@@ -86,8 +86,12 @@ def count_studies(
         params["query.spons"] = sponsor
     if status:
         params["filter.overallStatus"] = status
+    # /stats/size returns dataset-wide stats and ignores query filters; the
+    # /studies endpoint with countTotal=true returns the filtered totalCount.
+    params["countTotal"] = "true"
+    params["pageSize"] = 1
 
-    resp = httpx.get(f"{CTG_BASE_URL}/stats/size", params=params, timeout=15.0)
+    resp = httpx.get(f"{CTG_BASE_URL}/studies", params=params, timeout=15.0)
     resp.raise_for_status()
     return resp.json().get("totalCount", 0)
 

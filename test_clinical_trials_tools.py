@@ -122,7 +122,7 @@ def test_check_eligibility_returns_eligibility_fields():
 
 @respx.mock
 def test_count_studies_returns_total():
-    respx.get("https://clinicaltrials.gov/api/v2/stats/size").mock(
+    respx.get("https://clinicaltrials.gov/api/v2/studies").mock(
         return_value=httpx.Response(200, json={"totalCount": 42})
     )
     result = count_studies(condition="PTSD", status="RECRUITING")
@@ -131,7 +131,7 @@ def test_count_studies_returns_total():
 
 @respx.mock
 def test_count_studies_no_filters():
-    respx.get("https://clinicaltrials.gov/api/v2/stats/size").mock(
+    respx.get("https://clinicaltrials.gov/api/v2/studies").mock(
         return_value=httpx.Response(200, json={"totalCount": 500000})
     )
     result = count_studies()

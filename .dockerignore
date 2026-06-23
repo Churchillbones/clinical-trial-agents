@@ -8,3 +8,8 @@ __pycache__/
 .vscode/
 *.md
 test_*.py
+
+# Local-only DevUI (option 2) — never part of the hosted image
+.venv-devui/
+devui_local.py
+requirements-dev.txt

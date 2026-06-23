@@ -3,3 +3,10 @@ __pycache__/
 *.pyc
 .git/
 .pytest_cache/
+.env
+.env.example
+
+# Local-only DevUI (option 2) — never part of the hosted deploy
+.venv-devui/
+devui_local.py
+requirements-dev.txt
