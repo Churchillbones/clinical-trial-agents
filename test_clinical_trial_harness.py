@@ -23,6 +23,12 @@ def test_validate_nct_id_rejects_invalid_value():
         validate_nct_id("123")
 
 
+@pytest.mark.parametrize("value", [None, 12345678, object()])
+def test_validate_nct_id_rejects_non_string_values_without_attribute_error(value):
+    with pytest.raises(ValueError, match="NCT########"):
+        validate_nct_id(value)
+
+
 def test_phi_screen_detects_direct_identifiers_without_echoing_them():
     findings = detect_potential_phi("DOB: 01/02/1970 and SSN 123-45-6789")
     assert findings == ["ssn", "date_of_birth"]
@@ -91,6 +97,14 @@ def test_prioritize_va_locations_is_stable():
         "Portland VAMC",
         "University Hospital",
     ]
+
+
+def test_prioritize_va_locations_handles_none_and_filters_invalid_entries():
+    assert prioritize_va_locations(None) == []
+    ordered = prioritize_va_locations(
+        [None, "bad", {"facility": None}, {"facility": "Portland VAMC"}]
+    )
+    assert ordered == [{"facility": "Portland VAMC"}, {"facility": None}]
 
 
 def test_referral_authority_is_draft_only():
