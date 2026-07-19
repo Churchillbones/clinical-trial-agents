@@ -31,7 +31,11 @@ def search_studies(
     page_size: int = 10,
 ) -> dict:
     """Search ClinicalTrials.gov and attach a bounded search proof receipt."""
-    bounded_page_size = max(1, min(int(page_size), 20))
+    try:
+        bounded_page_size = max(1, min(int(page_size), 20))
+    except (TypeError, ValueError):
+        bounded_page_size = 10
+
     params: dict[str, str | int] = {"pageSize": bounded_page_size}
     if term:
         params["query.term"] = term
@@ -71,14 +75,15 @@ def search_studies(
 
 def get_study_details(nct_id: str) -> dict:
     """Retrieve the complete record for a single study by NCT ID."""
-    resp = httpx.get(f"{CTG_BASE_URL}/studies/{nct_id}", timeout=15.0)
+    normalized_requested_id = validate_nct_id(nct_id)
+    resp = httpx.get(
+        f"{CTG_BASE_URL}/studies/{normalized_requested_id}", timeout=15.0
+    )
     resp.raise_for_status()
     result = resp.json()
-    resolved_id = (
-        result.get("protocolSection", {})
-        .get("identificationModule", {})
-        .get("nctId", nct_id)
-    )
+    protocol = result.get("protocolSection") or {}
+    ident = protocol.get("identificationModule") or {}
+    resolved_id = ident.get("nctId") or normalized_requested_id
     try:
         normalized_id = validate_nct_id(resolved_id)
     except ValueError:
@@ -107,7 +112,8 @@ def check_eligibility(nct_id: str) -> dict:
     )
     resp.raise_for_status()
     data = resp.json()
-    module = data.get("protocolSection", {}).get("eligibilityModule", {})
+    protocol = data.get("protocolSection") or {}
+    module = protocol.get("eligibilityModule") or {}
     return {
         "nctId": normalized_id,
         "eligibilityCriteria": module.get("eligibilityCriteria", ""),
@@ -161,14 +167,14 @@ def generate_trial_summary(nct_id: str, patient_context: str | None = None) -> d
     require_deidentified_text(patient_context, field_name="patient_context")
 
     study = get_study_details(normalized_id)
-    protocol = study.get("protocolSection", {})
-    ident = protocol.get("identificationModule", {})
-    desc = protocol.get("descriptionModule", {})
-    elig = protocol.get("eligibilityModule", {})
-    status = protocol.get("statusModule", {})
-    contacts_locations = protocol.get("contactsLocationsModule", {})
-    resolved_id = validate_nct_id(ident.get("nctId", normalized_id))
-    locations = prioritize_va_locations(contacts_locations.get("locations", []))
+    protocol = study.get("protocolSection") or {}
+    ident = protocol.get("identificationModule") or {}
+    desc = protocol.get("descriptionModule") or {}
+    elig = protocol.get("eligibilityModule") or {}
+    status = protocol.get("statusModule") or {}
+    contacts_locations = protocol.get("contactsLocationsModule") or {}
+    resolved_id = validate_nct_id(ident.get("nctId") or normalized_id)
+    locations = prioritize_va_locations(contacts_locations.get("locations") or [])
 
     return {
         "nctId": resolved_id,
@@ -184,7 +190,7 @@ def generate_trial_summary(nct_id: str, patient_context: str | None = None) -> d
         },
         "overallStatus": status.get("overallStatus", ""),
         "contactInfo": {
-            "centralContacts": contacts_locations.get("centralContacts", []),
+            "centralContacts": contacts_locations.get("centralContacts") or [],
             "locations": locations,
         },
         "link": f"https://clinicaltrials.gov/study/{resolved_id}",
