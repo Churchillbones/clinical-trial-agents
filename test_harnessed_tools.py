@@ -52,11 +52,45 @@ def test_search_keeps_existing_shape_and_adds_receipt(monkeypatch):
     assert seen["params"]["pageSize"] == 20
 
 
+@pytest.mark.parametrize("page_size", [None, "invalid"])
+def test_search_invalid_page_size_falls_back_to_default(monkeypatch, page_size):
+    seen = {}
+
+    def fake_get(url, *, params=None, timeout=None):
+        seen["params"] = params
+        return FakeResponse({"studies": [], "totalCount": 0})
+
+    monkeypatch.setattr(tools.httpx, "get", fake_get)
+    tools.search_studies(condition="PTSD", page_size=page_size)
+    assert seen["params"]["pageSize"] == 10
+
+
+def test_get_study_details_handles_explicitly_null_modules(monkeypatch):
+    monkeypatch.setattr(
+        tools.httpx,
+        "get",
+        lambda *a, **k: FakeResponse({"protocolSection": None}),
+    )
+    result = tools.get_study_details(NCT)
+    assert result["_harness"]["nctId"] == NCT
+
+
 def test_eligibility_keeps_existing_fields_and_adds_boundary(monkeypatch):
     monkeypatch.setattr(tools.httpx, "get", lambda *a, **k: FakeResponse(DETAIL))
     result = tools.check_eligibility(NCT)
     assert result["minimumAge"] == "18 Years"
     assert result["_harness"]["assessmentStatus"] == "clinician_review_required"
+
+
+def test_eligibility_handles_explicitly_null_modules(monkeypatch):
+    monkeypatch.setattr(
+        tools.httpx,
+        "get",
+        lambda *a, **k: FakeResponse({"protocolSection": {"eligibilityModule": None}}),
+    )
+    result = tools.check_eligibility(NCT)
+    assert result["eligibilityCriteria"] == ""
+    assert result["minimumAge"] == "N/A"
 
 
 def test_summary_prioritizes_va_and_preserves_patient_context(monkeypatch):
@@ -65,6 +99,23 @@ def test_summary_prioritizes_va_and_preserves_patient_context(monkeypatch):
     assert result["patientContext"] == "58-year-old male with PTSD"
     assert result["contactInfo"]["locations"][0]["facility"] == "Portland VAMC"
     assert result["_harness"]["patientContextStatus"] == "validated_deidentified"
+
+
+def test_summary_handles_explicitly_null_modules_and_locations(monkeypatch):
+    payload = {
+        "protocolSection": {
+            "identificationModule": None,
+            "descriptionModule": None,
+            "eligibilityModule": None,
+            "statusModule": None,
+            "contactsLocationsModule": {"locations": [None, "bad"]},
+        }
+    }
+    monkeypatch.setattr(tools.httpx, "get", lambda *a, **k: FakeResponse(payload))
+    result = tools.generate_trial_summary(NCT)
+    assert result["nctId"] == NCT
+    assert result["title"] == ""
+    assert result["contactInfo"]["locations"] == []
 
 
 def test_referral_preserves_message_and_adds_authority():
