@@ -55,9 +55,9 @@ def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def validate_nct_id(nct_id: str) -> str:
+def validate_nct_id(nct_id: Any) -> str:
     """Normalize and validate a ClinicalTrials.gov identifier."""
-    normalized = (nct_id or "").strip().upper()
+    normalized = str(nct_id or "").strip().upper()
     if not re.fullmatch(r"NCT\d{8}", normalized):
         raise ValueError("nct_id must match the format NCT########")
     return normalized
@@ -167,17 +167,22 @@ def build_eligibility_receipt(nct_id: str) -> dict[str, Any]:
     }
 
 
-def prioritize_va_locations(locations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def prioritize_va_locations(
+    locations: list[dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
     """Return a stable copy with VA facilities first, preserving source order."""
+    if not locations:
+        return []
 
     def is_va(location: dict[str, Any]) -> bool:
-        facility = str(location.get("facility", "")).lower()
+        facility = str(location.get("facility") or "").lower()
         return any(
             marker in facility
             for marker in ("vamc", "veterans affairs", "va medical", " va ")
         ) or facility.startswith("va ")
 
-    return sorted(list(locations), key=lambda location: 0 if is_va(location) else 1)
+    valid_locations = [location for location in locations if isinstance(location, dict)]
+    return sorted(valid_locations, key=lambda location: 0 if is_va(location) else 1)
 
 
 def referral_authority_envelope() -> dict[str, Any]:
