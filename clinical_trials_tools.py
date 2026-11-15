@@ -204,7 +204,7 @@ async def _get_json(
                         f"{attempt} attempts"
                     )
                 else:
-                    message = f"Could not connect to ClinicalTrials.gov after {attempt} attempts"
+                    message = f"Could not reach ClinicalTrials.gov after {attempt} attempts"
                 raise ClinicalTrialsApiError(message, retryable=True) from exc
             delay = _backoff_seconds(attempt)
             logger.warning(

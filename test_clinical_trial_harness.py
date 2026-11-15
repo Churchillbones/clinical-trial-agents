@@ -96,8 +96,8 @@ def test_phi_screen_detects_labelled_identifier_variants(text, category):
     assert category in detect_potential_phi(text)
 
 
-def test_phi_screen_does_not_require_dashes_in_an_unlabelled_ssn_to_pass():
-    # Nine bare digits without a label are too ambiguous to block.
+def test_phi_screen_allows_unlabelled_nine_digit_numbers():
+    # Nine bare digits without an SSN label are too ambiguous to block.
     assert detect_potential_phi("123456789") == []
 
 
