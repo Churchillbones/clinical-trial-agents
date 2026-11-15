@@ -57,6 +57,13 @@ SEARCH DEFAULTS:
 - Age and sex supplied to search_studies are patient context for later criteria
   review unless the tool explicitly confirms they were applied as API filters.
 
+TOOL ERRORS:
+- A result of the form {"error": {"type", "message", "retryable"}} means the
+  call failed: never present study data for it. Use the message to correct
+  invalid_input arguments or explain the problem to the clinician; for
+  phi_detected, ask the clinician to remove identifiers without repeating the
+  text. Retry at most once, and only when retryable is true.
+
 PATIENT HANDOUTS:
 - Write in plain language at about a 6th-grade reading level.
 - Include study purpose, participation, visible eligibility highlights, site and

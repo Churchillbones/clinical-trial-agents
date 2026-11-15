@@ -14,7 +14,9 @@ contact a site, transmit a referral, or write to a clinical record.
 `clinical_trial_harness.py` owns:
 
 - ClinicalTrials.gov NCT identifier validation
-- conservative screening for common direct identifiers
+- conservative screening for common direct identifiers, applied to patient
+  context, referral text, and every free-text search or count input before it
+  is sent to ClinicalTrials.gov
 - source-freshness and search proof receipts
 - eligibility evidence anchors and allowed classifications
 - VA-first location ordering
@@ -39,6 +41,26 @@ object. Callers should treat this object as part of the clinical contract.
 - an explicit non-eligibility boundary
 - warnings when supplied context was not applied as an API filter
 - recovery options for empty results
+- `projection`: marks the result as a compact view (`isFullRecord: false`) and
+  records the summary length limit, the per-study location cap, and how many
+  malformed upstream entries were skipped
+
+Each study in the result also carries its own `_harness` with
+`locationsTotal`, `locationsReturned`, `locationsTruncated`, and
+`briefSummaryTruncated`.
+
+### Study details and summary receipts
+
+`get_study_details` returns only `protocolSection` and `hasResults`. Its receipt
+adds `projection` (with `omittedSections` and `maxLocations`) plus
+`locationsTotal`, `locationsReturned`, and `locationsTruncated`. Locations are
+ordered VA-first before the cap is applied, so a truncated list can omit
+non-VA sites; check `locationsTruncated` before treating the list as complete.
+`generate_trial_summary` carries the same location counts and the source
+timestamp.
+
+Eligibility fields that are absent from the source record are returned as
+`null`. The tools never substitute defaults such as `ALL`, `N/A`, or `No`.
 
 ### Eligibility receipt
 
@@ -58,6 +80,19 @@ The conclusions `eligible`, `ineligible`, and `recommended_trial` are prohibited
 identifiers and returns a proposed, non-transmitted draft. Permitted actions are
 copy, edit, and dismiss. Sending, submitting, contacting the site, and enrolling
 the patient remain unavailable.
+
+## Tool errors
+
+The agent-facing tools never raise. A failed call returns:
+
+```json
+{"error": {"type": "...", "message": "...", "retryable": false}}
+```
+
+`type` is one of `invalid_input`, `phi_detected`, `not_found`,
+`upstream_unavailable`, or `internal`. Messages never contain the rejected
+text or raw exception details. `count_studies` returns `{"count": n}` and
+`list_enum_values` returns `{"enumName": ..., "values": [...]}`.
 
 ## Evidence anchor format
 
