@@ -49,6 +49,70 @@ def test_phi_screen_rejects_email():
         )
 
 
+# The screen also runs on search terms sent to ClinicalTrials.gov, so ordinary
+# trial vocabulary must pass.
+@pytest.mark.parametrize(
+    "text",
+    [
+        "NCT01234567",
+        "PHASE2",
+        "97239",
+        "97239-2964",
+        "Portland, OR 97239",
+        "mRNA-1273",  # previously mistaken for an "MRN" label
+        "mRNA-based vaccine",
+        "patient identified with treatment-resistant PTSD",  # previously "patient id"
+        "patient idiopathic pulmonary fibrosis",
+        "MK-3475",
+        "HbA1c 7.5-12%",
+        "dobutamine stress echo 10/20/30",
+        "newborn screening 01/02/2026",
+        "Department of Veterans Affairs",
+        "MRN pending",
+    ],
+)
+def test_phi_screen_allows_legitimate_search_terms(text):
+    assert detect_potential_phi(text) == []
+
+
+@pytest.mark.parametrize(
+    ("text", "category"),
+    [
+        ("SSN 123456789", "ssn"),
+        ("SSN: 123 45 6789", "ssn"),
+        ("social security number 123456789", "ssn"),
+        ("DOB 1970-01-02", "date_of_birth"),
+        ("D.O.B. 01/02/1970", "date_of_birth"),
+        ("DOB: March 3, 1961", "date_of_birth"),
+        ("born 01/02/1970", "date_of_birth"),
+        ("MRN1234567", "medical_record_identifier"),
+        ("patient ID: A123456", "medical_record_identifier"),
+        ("patient id number 12345", "medical_record_identifier"),
+        ("medical record no. 12345", "medical_record_identifier"),
+        ("patient name is John Smith", "labeled_patient_name"),
+    ],
+)
+def test_phi_screen_detects_labelled_identifier_variants(text, category):
+    assert category in detect_potential_phi(text)
+
+
+def test_phi_screen_does_not_require_dashes_in_an_unlabelled_ssn_to_pass():
+    # Nine bare digits without a label are too ambiguous to block.
+    assert detect_potential_phi("123456789") == []
+
+
+def test_phi_screen_accepts_non_string_values_without_type_error():
+    assert detect_potential_phi(58) == []
+    assert detect_potential_phi(5035550100) == ["phone_number"]
+
+
+def test_phi_rejection_message_never_echoes_the_identifier():
+    with pytest.raises(ValueError) as excinfo:
+        require_deidentified_text("SSN 123-45-6789", field_name="term")
+    assert "123-45-6789" not in str(excinfo.value)
+    assert "term" in str(excinfo.value)
+
+
 def test_search_receipt_marks_results_as_clinician_review_candidates():
     receipt = build_search_receipt(
         query={"condition": "PTSD", "status": "RECRUITING", "age": "58"},

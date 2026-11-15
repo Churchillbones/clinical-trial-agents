@@ -14,21 +14,42 @@ from typing import Any
 HARNESS_VERSION = "1.0.0"
 SEARCH_JOB_ID = "find_recruiting_clinical_trials"
 
+# Labels are followed by (?![a-z]) so a label that is only the start of a longer
+# word is not treated as a label (e.g. "mRNA-1273" is not "MRN", "patient
+# identified" is not "patient id"). These patterns also screen search terms sent
+# to ClinicalTrials.gov, so NCT ids, phases and ZIP codes must not match.
 _PHI_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("ssn", re.compile(r"\b\d{3}-\d{2}-\d{4}\b")),
+    (
+        "ssn",
+        re.compile(
+            # 123-45-6789 anywhere, or nine digits (any spacing) after an SSN label.
+            r"\b\d{3}-\d{2}-\d{4}\b"
+            r"|\b(?:ssn|social\s+security(?:\s+(?:number|no|num))?)(?![a-z])"
+            r"[\s.:#=]*(?:is\s+)?\d{3}[\s-]?\d{2}[\s-]?\d{4}\b",
+            re.IGNORECASE,
+        ),
+    ),
     (
         "date_of_birth",
         re.compile(
-            r"\b(?:dob|date\s+of\s+birth)\s*[:=]?\s*"
-            r"(?:\d{1,2}[/-]){2}\d{2,4}\b",
+            # A full date (numeric, ISO, or with a month name) after a birth label.
+            r"\b(?:dob|d\.o\.b\.?|date\s+of\s+birth|birth\s*date|born(?:\s+on)?)"
+            r"(?![a-z])[\s.:=-]*"
+            r"(?:\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}"
+            r"|\d{4}[/.-]\d{1,2}[/.-]\d{1,2}"
+            r"|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4}"
+            r"|\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?,?\s+\d{4})"
+            r"\b",
             re.IGNORECASE,
         ),
     ),
     (
         "medical_record_identifier",
         re.compile(
-            r"\b(?:mrn|medical\s+record\s+number|patient\s+id)\s*[:#=]?\s*"
-            r"[A-Za-z0-9-]{4,}\b",
+            # An identifier containing at least one digit after an MRN / patient ID label.
+            r"\b(?:mrn|medical\s+record\s*(?:number|no|num|#)"
+            r"|patient\s+id(?:entifier)?(?:\s*(?:number|no|num|#))?)(?![a-z])"
+            r"[\s.:#=]*(?=[a-z0-9-]*\d)[a-z0-9-]{4,}\b",
             re.IGNORECASE,
         ),
     ),
@@ -43,7 +64,8 @@ _PHI_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
         "labeled_patient_name",
         re.compile(
-            r"\b(?:patient|veteran)\s+name\s*[:=]\s*[A-Za-z][A-Za-z' -]{2,}",
+            r"\b(?:patient|veteran)(?:'s)?\s+name(?![a-z])\s*(?:[:=]|is\b)\s*"
+            r"[A-Za-z][A-Za-z' -]{2,}",
             re.IGNORECASE,
         ),
     ),
@@ -68,9 +90,12 @@ def detect_potential_phi(text: str | None) -> list[str]:
 
     This is a guardrail, not a full de-identification service. It intentionally
     reports categories only and never echoes the suspected identifier.
+    Non-string values (e.g. a number from a tool call) are screened as text.
     """
     if not text:
         return []
+    if not isinstance(text, str):
+        text = str(text)
     return [name for name, pattern in _PHI_PATTERNS if pattern.search(text)]
 
 
